@@ -1,0 +1,3227 @@
+//+------------------------------------------------------------------+
+//|                    EMPIRE TRADE MARKETS                          |
+//|                         EMPIRE BOT V20                           |
+//|                                                                  |
+//|  Advanced MT5 Expert Advisor                                     |
+//|                                                                  |
+//|  Core systems:                                                   |
+//|  - Multi-timeframe trend analysis                                |
+//|  - EMA trend filter                                              |
+//|  - RSI momentum                                                  |
+//|  - ATR volatility                                                |
+//|  - Market structure / swing analysis                             |
+//|  - Break of Structure                                            |
+//|  - Liquidity sweep detection                                     |
+//|  - Support / resistance                                          |
+//|  - Candlestick confirmation                                      |
+//|  - Signal scoring                                                |
+//|  - Dynamic ATR SL/TP                                             |
+//|  - Risk-based position sizing                                    |
+//|  - Break-even                                                    |
+//|  - Trailing stop                                                 |
+//|  - Partial close                                                 |
+//|  - Daily / weekly loss protection                                |
+//|  - Consecutive-loss protection                                   |
+//|  - Spread protection                                             |
+//|  - Session protection                                            |
+//|  - Cooldown                                                      |
+//|  - Friday protection                                             |
+//|  - Maximum trades                                                |
+//|  - On-chart dashboard                                            |
+//+------------------------------------------------------------------+
+#property copyright "Empire Trade Markets"
+#property version   "20.00"
+#property strict
+#property description "Empire Trade Markets - EmpireBot V20"
+#property description "Advanced multi-confirmation MT5 Expert Advisor"
+
+#include <Trade/Trade.mqh>
+
+CTrade trade;
+
+//====================================================================
+// ENUMS
+//====================================================================
+
+enum ENUM_TRADE_DIRECTION
+{
+   DIRECTION_BOTH = 0,
+   DIRECTION_BUY  = 1,
+   DIRECTION_SELL = 2
+};
+
+//====================================================================
+// GENERAL SETTINGS
+//====================================================================
+
+input group "========== GENERAL =========="
+
+input string InpSymbol = "";
+input ENUM_TRADE_DIRECTION InpDirection = DIRECTION_BOTH;
+
+input ENUM_TIMEFRAMES InpTrendTF     = PERIOD_H4;
+input ENUM_TIMEFRAMES InpStructureTF = PERIOD_H1;
+input ENUM_TIMEFRAMES InpSetupTF     = PERIOD_M15;
+input ENUM_TIMEFRAMES InpEntryTF     = PERIOD_M5;
+
+input long InpMagicNumber = 20262026;
+
+input bool InpAllowTrading = true;
+
+input int InpMaxOpenTrades = 1;
+
+input int InpMaxTradesPerDay = 5;
+
+input int InpCooldownMinutes = 30;
+
+//====================================================================
+// RISK SETTINGS
+//====================================================================
+
+input group "========== RISK MANAGEMENT =========="
+
+input double InpRiskPercent = 1.0;
+
+input double InpMaximumDailyLossPercent = 3.0;
+
+input double InpMaximumWeeklyLossPercent = 7.0;
+
+input double InpMaximumDrawdownPercent = 15.0;
+
+input int InpMaximumConsecutiveLosses = 3;
+
+input double InpMaximumLot = 5.0;
+
+input bool InpUseEquityForRisk = true;
+
+//====================================================================
+// EMA SETTINGS
+//====================================================================
+
+input group "========== EMA TREND FILTER =========="
+
+input bool InpUseEMAFilter = true;
+
+input int InpFastEMA = 20;
+
+input int InpMediumEMA = 50;
+
+input int InpSlowEMA = 200;
+
+//====================================================================
+// RSI SETTINGS
+//====================================================================
+
+input group "========== RSI MOMENTUM =========="
+
+input bool InpUseRSIFilter = true;
+
+input int InpRSIPeriod = 14;
+
+input double InpRSIBuyMinimum = 50.0;
+
+input double InpRSIBuyMaximum = 70.0;
+
+input double InpRSISellMinimum = 30.0;
+
+input double InpRSISellMaximum = 50.0;
+
+//====================================================================
+// ATR SETTINGS
+//====================================================================
+
+input group "========== ATR VOLATILITY =========="
+
+input bool InpUseATRFilter = true;
+
+input int InpATRPeriod = 14;
+
+input double InpMinimumATRPoints = 50.0;
+
+input double InpATRStopMultiplier = 1.5;
+
+input double InpATRTargetMultiplier = 3.0;
+
+//====================================================================
+// MARKET STRUCTURE
+//====================================================================
+
+input group "========== MARKET STRUCTURE =========="
+
+input bool InpUseMarketStructure = true;
+
+input int InpSwingLookback = 80;
+
+input int InpSwingStrength = 2;
+
+input bool InpUseBreakOfStructure = true;
+
+//====================================================================
+// LIQUIDITY
+//====================================================================
+
+input group "========== LIQUIDITY SWEEP =========="
+
+input bool InpUseLiquiditySweep = true;
+
+input int InpLiquidityLookback = 30;
+
+input double InpLiquidityTolerancePoints = 50.0;
+
+//====================================================================
+// SUPPORT / RESISTANCE
+//====================================================================
+
+input group "========== SUPPORT / RESISTANCE =========="
+
+input bool InpUseSupportResistance = true;
+
+input int InpSRLookback = 100;
+
+input double InpSRTolerancePoints = 100.0;
+
+//====================================================================
+// CANDLESTICKS
+//====================================================================
+
+input group "========== CANDLE CONFIRMATION =========="
+
+input bool InpUseCandleConfirmation = true;
+
+input double InpMinimumBodyPercent = 50.0;
+
+input bool InpUseEngulfing = true;
+
+input bool InpUsePinBars = true;
+
+//====================================================================
+// SIGNAL SCORING
+//====================================================================
+
+input group "========== SIGNAL SCORING =========="
+
+input int InpMinimumBuyScore = 7;
+
+input int InpMinimumSellScore = 7;
+
+input int InpMaximumSignalScore = 12;
+
+//====================================================================
+// RISK REWARD
+//====================================================================
+
+input group "========== RISK / REWARD =========="
+
+input double InpMinimumRiskReward = 1.5;
+
+input bool InpUseATRStops = true;
+
+//====================================================================
+// BREAK EVEN
+//====================================================================
+
+input group "========== BREAK EVEN =========="
+
+input bool InpUseBreakEven = true;
+
+input double InpBreakEvenAtR = 1.0;
+
+input double InpBreakEvenLockPoints = 20.0;
+
+//====================================================================
+// TRAILING STOP
+//====================================================================
+
+input group "========== TRAILING STOP =========="
+
+input bool InpUseTrailingStop = true;
+
+input double InpTrailingStartR = 1.5;
+
+input double InpTrailingATRMultiplier = 1.0;
+
+//====================================================================
+// PARTIAL CLOSE
+//====================================================================
+
+input group "========== PARTIAL CLOSE =========="
+
+input bool InpUsePartialClose = true;
+
+input double InpPartialCloseAtR = 1.5;
+
+input double InpPartialClosePercent = 50.0;
+
+//====================================================================
+// SPREAD
+//====================================================================
+
+input group "========== SPREAD PROTECTION =========="
+
+input bool InpUseSpreadFilter = true;
+
+input double InpMaximumSpreadPoints = 100.0;
+
+//====================================================================
+// SESSION
+//====================================================================
+
+input group "========== TRADING SESSIONS =========="
+
+input bool InpUseSessionFilter = true;
+
+input bool InpTradeAsianSession = false;
+
+input bool InpTradeLondonSession = true;
+
+input bool InpTradeNewYorkSession = true;
+
+input int InpAsianStartHour = 0;
+
+input int InpAsianEndHour = 7;
+
+input int InpLondonStartHour = 7;
+
+input int InpLondonEndHour = 13;
+
+input int InpNewYorkStartHour = 13;
+
+input int InpNewYorkEndHour = 21;
+
+//====================================================================
+// FRIDAY
+//====================================================================
+
+input group "========== FRIDAY PROTECTION =========="
+
+input bool InpAvoidFridayLate = true;
+
+input int InpFridayStopHour = 18;
+
+//====================================================================
+// NEWS
+//====================================================================
+
+input group "========== NEWS PROTECTION =========="
+
+input bool InpUseNewsFilter = false;
+
+input int InpNewsMinutesBefore = 30;
+
+input int InpNewsMinutesAfter = 30;
+
+//====================================================================
+// DASHBOARD
+//====================================================================
+
+input group "========== DASHBOARD =========="
+
+input bool InpShowDashboard = true;
+
+//====================================================================
+// GLOBAL VARIABLES
+//====================================================================
+
+string TradeSymbol;
+
+int FastEMAHandleTrend = INVALID_HANDLE;
+int MediumEMAHandleTrend = INVALID_HANDLE;
+int SlowEMAHandleTrend = INVALID_HANDLE;
+
+int FastEMAHandleSetup = INVALID_HANDLE;
+int MediumEMAHandleSetup = INVALID_HANDLE;
+
+int RSIHandleSetup = INVALID_HANDLE;
+
+int ATRHandleSetup = INVALID_HANDLE;
+
+datetime LastEntryBar = 0;
+
+datetime LastTradeTime = 0;
+
+datetime CurrentDay = 0;
+
+datetime CurrentWeek = 0;
+
+double DayStartingBalance = 0.0;
+
+double WeekStartingBalance = 0.0;
+
+double HighestEquity = 0.0;
+
+int TradesToday = 0;
+
+int ConsecutiveLosses = 0;
+
+bool TradingLocked = false;
+
+//====================================================================
+// INITIALIZATION
+//====================================================================
+
+int OnInit()
+{
+   TradeSymbol = InpSymbol;
+
+   if(TradeSymbol == "")
+      TradeSymbol = _Symbol;
+
+   if(!SymbolSelect(TradeSymbol,true))
+   {
+      Print("EmpireBot V20: Cannot select symbol ",TradeSymbol);
+      return(INIT_FAILED);
+   }
+
+   //===============================================================
+   // TREND EMA
+   //===============================================================
+
+   FastEMAHandleTrend =
+      iMA(
+         TradeSymbol,
+         InpTrendTF,
+         InpFastEMA,
+         0,
+         MODE_EMA,
+         PRICE_CLOSE
+      );
+
+   MediumEMAHandleTrend =
+      iMA(
+         TradeSymbol,
+         InpTrendTF,
+         InpMediumEMA,
+         0,
+         MODE_EMA,
+         PRICE_CLOSE
+      );
+
+   SlowEMAHandleTrend =
+      iMA(
+         TradeSymbol,
+         InpTrendTF,
+         InpSlowEMA,
+         0,
+         MODE_EMA,
+         PRICE_CLOSE
+      );
+
+   //===============================================================
+   // SETUP EMA
+   //===============================================================
+
+   FastEMAHandleSetup =
+      iMA(
+         TradeSymbol,
+         InpSetupTF,
+         InpFastEMA,
+         0,
+         MODE_EMA,
+         PRICE_CLOSE
+      );
+
+   MediumEMAHandleSetup =
+      iMA(
+         TradeSymbol,
+         InpSetupTF,
+         InpMediumEMA,
+         0,
+         MODE_EMA,
+         PRICE_CLOSE
+      );
+
+   //===============================================================
+   // RSI
+   //===============================================================
+
+   RSIHandleSetup =
+      iRSI(
+         TradeSymbol,
+         InpSetupTF,
+         InpRSIPeriod,
+         PRICE_CLOSE
+      );
+
+   //===============================================================
+   // ATR
+   //===============================================================
+
+   ATRHandleSetup =
+      iATR(
+         TradeSymbol,
+         InpSetupTF,
+         InpATRPeriod
+      );
+
+   if(
+      FastEMAHandleTrend == INVALID_HANDLE ||
+      MediumEMAHandleTrend == INVALID_HANDLE ||
+      SlowEMAHandleTrend == INVALID_HANDLE ||
+      FastEMAHandleSetup == INVALID_HANDLE ||
+      MediumEMAHandleSetup == INVALID_HANDLE ||
+      RSIHandleSetup == INVALID_HANDLE ||
+      ATRHandleSetup == INVALID_HANDLE
+   )
+   {
+      Print("EmpireBot V20: Indicator initialization failed.");
+      return(INIT_FAILED);
+   }
+
+   trade.SetExpertMagicNumber(InpMagicNumber);
+
+   trade.SetDeviationInPoints(30);
+
+   DayStartingBalance =
+      AccountInfoDouble(ACCOUNT_BALANCE);
+
+   WeekStartingBalance =
+      DayStartingBalance;
+
+   HighestEquity =
+      AccountInfoDouble(ACCOUNT_EQUITY);
+
+   CurrentDay =
+      GetDayStart();
+
+   CurrentWeek =
+      GetWeekStart();
+
+   Print("============================================");
+   Print("       EMPIRE TRADE MARKETS");
+   Print("            EMPIRE BOT V20");
+   Print("============================================");
+   Print("Symbol: ",TradeSymbol);
+   Print("Trend TF: ",EnumToString(InpTrendTF));
+   Print("Structure TF: ",EnumToString(InpStructureTF));
+   Print("Setup TF: ",EnumToString(InpSetupTF));
+   Print("Entry TF: ",EnumToString(InpEntryTF));
+   Print("Risk: ",DoubleToString(InpRiskPercent,2),"%");
+   Print("============================================");
+
+   return(INIT_SUCCEEDED);
+}
+
+//====================================================================
+// DEINITIALIZATION
+//====================================================================
+
+void OnDeinit(const int reason)
+{
+   if(FastEMAHandleTrend != INVALID_HANDLE)
+      IndicatorRelease(FastEMAHandleTrend);
+
+   if(MediumEMAHandleTrend != INVALID_HANDLE)
+      IndicatorRelease(MediumEMAHandleTrend);
+
+   if(SlowEMAHandleTrend != INVALID_HANDLE)
+      IndicatorRelease(SlowEMAHandleTrend);
+
+   if(FastEMAHandleSetup != INVALID_HANDLE)
+      IndicatorRelease(FastEMAHandleSetup);
+
+   if(MediumEMAHandleSetup != INVALID_HANDLE)
+      IndicatorRelease(MediumEMAHandleSetup);
+
+   if(RSIHandleSetup != INVALID_HANDLE)
+      IndicatorRelease(RSIHandleSetup);
+
+   if(ATRHandleSetup != INVALID_HANDLE)
+      IndicatorRelease(ATRHandleSetup);
+
+   Comment("");
+}
+
+//====================================================================
+// MAIN
+//====================================================================
+
+void OnTick()
+{
+   UpdateAccountProtection();
+
+   ManageOpenPositions();
+
+   if(InpShowDashboard)
+      DrawDashboard();
+
+   if(!InpAllowTrading)
+      return;
+
+   if(TradingLocked)
+      return;
+
+   if(IsDailyLossLimitReached())
+   {
+      TradingLocked = true;
+      return;
+   }
+
+   if(IsWeeklyLossLimitReached())
+   {
+      TradingLocked = true;
+      return;
+   }
+
+   if(IsMaximumDrawdownReached())
+   {
+      TradingLocked = true;
+      return;
+   }
+
+   if(ConsecutiveLosses >= InpMaximumConsecutiveLosses)
+      return;
+
+   if(TradesToday >= InpMaxTradesPerDay)
+      return;
+
+   if(CountOurPositions() >= InpMaxOpenTrades)
+      return;
+
+   if(!IsTradingSession())
+      return;
+
+   if(!IsFridayAllowed())
+      return;
+
+   if(InpUseSpreadFilter && !IsSpreadAcceptable())
+      return;
+
+   if(InpUseNewsFilter && IsNewsBlocked())
+      return;
+
+   if(!CooldownFinished())
+      return;
+
+   if(!IsNewEntryBar())
+      return;
+
+   int BuyScore = 0;
+
+   int SellScore = 0;
+
+   CalculateSignalScores(
+      BuyScore,
+      SellScore
+   );
+
+   if(
+      BuyScore >= InpMinimumBuyScore &&
+      BuyScore > SellScore &&
+      (
+         InpDirection == DIRECTION_BOTH ||
+         InpDirection == DIRECTION_BUY
+      )
+   )
+   {
+      OpenBuy(BuyScore);
+   }
+
+   else if(
+      SellScore >= InpMinimumSellScore &&
+      SellScore > BuyScore &&
+      (
+         InpDirection == DIRECTION_BOTH ||
+         InpDirection == DIRECTION_SELL
+      )
+   )
+   {
+      OpenSell(SellScore);
+   }
+}
+
+//====================================================================
+// NEW BAR
+//====================================================================
+
+bool IsNewEntryBar()
+{
+   datetime BarTime =
+      iTime(
+         TradeSymbol,
+         InpEntryTF,
+         0
+      );
+
+   if(BarTime == 0)
+      return(false);
+
+   if(BarTime != LastEntryBar)
+   {
+      LastEntryBar = BarTime;
+      return(true);
+   }
+
+   return(false);
+}
+
+//====================================================================
+// SIGNAL SCORING
+//====================================================================
+
+void CalculateSignalScores(
+   int &BuyScore,
+   int &SellScore
+)
+{
+   BuyScore = 0;
+
+   SellScore = 0;
+
+   //===============================================================
+   // 1. HIGHER TIMEFRAME TREND
+   //===============================================================
+
+   int Trend = GetTrendDirection();
+
+   if(Trend == 1)
+      BuyScore += 2;
+
+   if(Trend == -1)
+      SellScore += 2;
+
+   //===============================================================
+   // 2. SETUP EMA
+   //===============================================================
+
+   if(InpUseEMAFilter)
+   {
+      int SetupTrend =
+         GetSetupTrend();
+
+      if(SetupTrend == 1)
+         BuyScore += 2;
+
+      if(SetupTrend == -1)
+         SellScore += 2;
+   }
+
+   //===============================================================
+   // 3. RSI
+   //===============================================================
+
+   if(InpUseRSIFilter)
+   {
+      double RSI =
+         GetRSI();
+
+      if(
+         RSI >= InpRSIBuyMinimum &&
+         RSI <= InpRSIBuyMaximum
+      )
+      {
+         BuyScore++;
+      }
+
+      if(
+         RSI >= InpRSISellMinimum &&
+         RSI <= InpRSISellMaximum
+      )
+      {
+         SellScore++;
+      }
+   }
+
+   //===============================================================
+   // 4. MARKET STRUCTURE
+   //===============================================================
+
+   if(InpUseMarketStructure)
+   {
+      int Structure =
+         GetMarketStructure();
+
+      if(Structure == 1)
+         BuyScore += 2;
+
+      if(Structure == -1)
+         SellScore += 2;
+   }
+
+   //===============================================================
+   // 5. BREAK OF STRUCTURE
+   //===============================================================
+
+   if(InpUseBreakOfStructure)
+   {
+      if(IsBullishBreakOfStructure())
+         BuyScore++;
+
+      if(IsBearishBreakOfStructure())
+         SellScore++;
+   }
+
+   //===============================================================
+   // 6. LIQUIDITY SWEEP
+   //===============================================================
+
+   if(InpUseLiquiditySweep)
+   {
+      if(IsBullishLiquiditySweep())
+         BuyScore += 2;
+
+      if(IsBearishLiquiditySweep())
+         SellScore += 2;
+   }
+
+   //===============================================================
+   // 7. SUPPORT / RESISTANCE
+   //===============================================================
+
+   if(InpUseSupportResistance)
+   {
+      if(IsNearSupport())
+         BuyScore++;
+
+      if(IsNearResistance())
+         SellScore++;
+   }
+
+   //===============================================================
+   // 8. CANDLE CONFIRMATION
+   //===============================================================
+
+   if(InpUseCandleConfirmation)
+   {
+      if(IsBullishCandleConfirmation())
+         BuyScore++;
+
+      if(IsBearishCandleConfirmation())
+         SellScore++;
+   }
+
+   //===============================================================
+   // 9. ATR
+   //===============================================================
+
+   if(InpUseATRFilter)
+   {
+      double ATR =
+         GetATR();
+
+      double Point =
+         SymbolInfoDouble(
+            TradeSymbol,
+            SYMBOL_POINT
+         );
+
+      if(
+         Point > 0 &&
+         ATR / Point >= InpMinimumATRPoints
+      )
+      {
+         if(BuyScore > SellScore)
+            BuyScore++;
+
+         if(SellScore > BuyScore)
+            SellScore++;
+      }
+   }
+
+   // Limit score
+
+   if(BuyScore > InpMaximumSignalScore)
+      BuyScore = InpMaximumSignalScore;
+
+   if(SellScore > InpMaximumSignalScore)
+      SellScore = InpMaximumSignalScore;
+}
+
+//====================================================================
+// HIGHER TIMEFRAME TREND
+//====================================================================
+
+int GetTrendDirection()
+{
+   double Fast[3];
+
+   double Medium[3];
+
+   double Slow[3];
+
+   ArraySetAsSeries(Fast,true);
+
+   ArraySetAsSeries(Medium,true);
+
+   ArraySetAsSeries(Slow,true);
+
+   if(
+      CopyBuffer(
+         FastEMAHandleTrend,
+         0,
+         1,
+         3,
+         Fast
+      ) < 3
+   )
+      return(0);
+
+   if(
+      CopyBuffer(
+         MediumEMAHandleTrend,
+         0,
+         1,
+         3,
+         Medium
+      ) < 3
+   )
+      return(0);
+
+   if(
+      CopyBuffer(
+         SlowEMAHandleTrend,
+         0,
+         1,
+         3,
+         Slow
+      ) < 3
+   )
+      return(0);
+
+   if(
+      Fast[0] > Medium[0] &&
+      Medium[0] > Slow[0]
+   )
+      return(1);
+
+   if(
+      Fast[0] < Medium[0] &&
+      Medium[0] < Slow[0]
+   )
+      return(-1);
+
+   return(0);
+}
+
+//====================================================================
+// SETUP TREND
+//====================================================================
+
+int GetSetupTrend()
+{
+   double Fast[2];
+
+   double Medium[2];
+
+   ArraySetAsSeries(Fast,true);
+
+   ArraySetAsSeries(Medium,true);
+
+   if(
+      CopyBuffer(
+         FastEMAHandleSetup,
+         0,
+         1,
+         2,
+         Fast
+      ) < 2
+   )
+      return(0);
+
+   if(
+      CopyBuffer(
+         MediumEMAHandleSetup,
+         0,
+         1,
+         2,
+         Medium
+      ) < 2
+   )
+      return(0);
+
+   if(Fast[0] > Medium[0])
+      return(1);
+
+   if(Fast[0] < Medium[0])
+      return(-1);
+
+   return(0);
+}
+
+//====================================================================
+// RSI
+//====================================================================
+
+double GetRSI()
+{
+   double Buffer[2];
+
+   ArraySetAsSeries(Buffer,true);
+
+   if(
+      CopyBuffer(
+         RSIHandleSetup,
+         0,
+         1,
+         2,
+         Buffer
+      ) < 2
+   )
+      return(50.0);
+
+   return(Buffer[0]);
+}
+
+//====================================================================
+// ATR
+//====================================================================
+
+double GetATR()
+{
+   double Buffer[2];
+
+   ArraySetAsSeries(Buffer,true);
+
+   if(
+      CopyBuffer(
+         ATRHandleSetup,
+         0,
+         1,
+         2,
+         Buffer
+      ) < 2
+   )
+      return(0.0);
+
+   return(Buffer[0]);
+}
+
+//====================================================================
+// MARKET STRUCTURE
+//====================================================================
+
+int GetMarketStructure()
+{
+   double High1 = 0.0;
+
+   double High2 = 0.0;
+
+   double Low1 = 0.0;
+
+   double Low2 = 0.0;
+
+   bool FoundHigh1 = false;
+
+   bool FoundHigh2 = false;
+
+   bool FoundLow1 = false;
+
+   bool FoundLow2 = false;
+
+   for(
+      int i = InpSwingStrength + 2;
+      i < InpSwingLookback;
+      i++
+   )
+   {
+      if(
+         IsSwingHigh(
+            TradeSymbol,
+            InpStructureTF,
+            i,
+            InpSwingStrength
+         )
+      )
+      {
+         if(!FoundHigh1)
+         {
+            High1 =
+               iHigh(
+                  TradeSymbol,
+                  InpStructureTF,
+                  i
+               );
+
+            FoundHigh1 = true;
+         }
+         else if(!FoundHigh2)
+         {
+            High2 =
+               iHigh(
+                  TradeSymbol,
+                  InpStructureTF,
+                  i
+               );
+
+            FoundHigh2 = true;
+         }
+      }
+
+      if(
+         IsSwingLow(
+            TradeSymbol,
+            InpStructureTF,
+            i,
+            InpSwingStrength
+         )
+      )
+      {
+         if(!FoundLow1)
+         {
+            Low1 =
+               iLow(
+                  TradeSymbol,
+                  InpStructureTF,
+                  i
+               );
+
+            FoundLow1 = true;
+         }
+         else if(!FoundLow2)
+         {
+            Low2 =
+               iLow(
+                  TradeSymbol,
+                  InpStructureTF,
+                  i
+               );
+
+            FoundLow2 = true;
+         }
+      }
+
+      if(
+         FoundHigh2 &&
+         FoundLow2
+      )
+         break;
+   }
+
+   if(
+      !FoundHigh1 ||
+      !FoundHigh2 ||
+      !FoundLow1 ||
+      !FoundLow2
+   )
+      return(0);
+
+   // Higher highs + higher lows
+
+   if(
+      High1 > High2 &&
+      Low1 > Low2
+   )
+      return(1);
+
+   // Lower highs + lower lows
+
+   if(
+      High1 < High2 &&
+      Low1 < Low2
+   )
+      return(-1);
+
+   return(0);
+}
+
+//====================================================================
+// SWING HIGH
+//====================================================================
+
+bool IsSwingHigh(
+   string Symbol,
+   ENUM_TIMEFRAMES TF,
+   int Shift,
+   int Strength
+)
+{
+   double Center =
+      iHigh(
+         Symbol,
+         TF,
+         Shift
+      );
+
+   if(Center <= 0)
+      return(false);
+
+   for(int i=1;i<=Strength;i++)
+   {
+      if(
+         iHigh(
+            Symbol,
+            TF,
+            Shift-i
+         ) >= Center
+      )
+         return(false);
+
+      if(
+         iHigh(
+            Symbol,
+            TF,
+            Shift+i
+         ) >= Center
+      )
+         return(false);
+   }
+
+   return(true);
+}
+
+//====================================================================
+// SWING LOW
+//====================================================================
+
+bool IsSwingLow(
+   string Symbol,
+   ENUM_TIMEFRAMES TF,
+   int Shift,
+   int Strength
+)
+{
+   double Center =
+      iLow(
+         Symbol,
+         TF,
+         Shift
+      );
+
+   if(Center <= 0)
+      return(false);
+
+   for(int i=1;i<=Strength;i++)
+   {
+      if(
+         iLow(
+            Symbol,
+            TF,
+            Shift-i
+         ) <= Center
+      )
+         return(false);
+
+      if(
+         iLow(
+            Symbol,
+            TF,
+            Shift+i
+         ) <= Center
+      )
+         return(false);
+   }
+
+   return(true);
+}
+
+//====================================================================
+// BREAK OF STRUCTURE - BULLISH
+//====================================================================
+
+bool IsBullishBreakOfStructure()
+{
+   double PreviousHigh = 0.0;
+
+   for(
+      int i=InpSwingStrength+2;
+      i<InpSwingLookback;
+      i++
+   )
+   {
+      if(
+         IsSwingHigh(
+            TradeSymbol,
+            InpStructureTF,
+            i,
+            InpSwingStrength
+         )
+      )
+      {
+         PreviousHigh =
+            iHigh(
+               TradeSymbol,
+               InpStructureTF,
+               i
+            );
+
+         break;
+      }
+   }
+
+   if(PreviousHigh <= 0)
+      return(false);
+
+   double ClosePrice =
+      iClose(
+         TradeSymbol,
+         InpStructureTF,
+         1
+      );
+
+   return(ClosePrice > PreviousHigh);
+}
+
+//====================================================================
+// BREAK OF STRUCTURE - BEARISH
+//====================================================================
+
+bool IsBearishBreakOfStructure()
+{
+   double PreviousLow = 0.0;
+
+   for(
+      int i=InpSwingStrength+2;
+      i<InpSwingLookback;
+      i++
+   )
+   {
+      if(
+         IsSwingLow(
+            TradeSymbol,
+            InpStructureTF,
+            i,
+            InpSwingStrength
+         )
+      )
+      {
+         PreviousLow =
+            iLow(
+               TradeSymbol,
+               InpStructureTF,
+               i
+            );
+
+         break;
+      }
+   }
+
+   if(PreviousLow <= 0)
+      return(false);
+
+   double ClosePrice =
+      iClose(
+         TradeSymbol,
+         InpStructureTF,
+         1
+      );
+
+   return(ClosePrice < PreviousLow);
+}
+
+//====================================================================
+// BULLISH LIQUIDITY SWEEP
+//====================================================================
+
+bool IsBullishLiquiditySweep()
+{
+   double CurrentLow =
+      iLow(
+         TradeSymbol,
+         InpSetupTF,
+         1
+      );
+
+   double CurrentClose =
+      iClose(
+         TradeSymbol,
+         InpSetupTF,
+         1
+      );
+
+   double Lowest = DBL_MAX;
+
+   for(
+      int i=2;
+      i<InpLiquidityLookback;
+      i++
+   )
+   {
+      double Low =
+         iLow(
+            TradeSymbol,
+            InpSetupTF,
+            i
+         );
+
+      if(Low < Lowest)
+         Lowest = Low;
+   }
+
+   if(Lowest == DBL_MAX)
+      return(false);
+
+   double Point =
+      SymbolInfoDouble(
+         TradeSymbol,
+         SYMBOL_POINT
+      );
+
+   double Tolerance =
+      InpLiquidityTolerancePoints * Point;
+
+   return(
+      CurrentLow < Lowest &&
+      CurrentClose > Lowest &&
+      (CurrentClose - CurrentLow) > Tolerance
+   );
+}
+
+//====================================================================
+// BEARISH LIQUIDITY SWEEP
+//====================================================================
+
+bool IsBearishLiquiditySweep()
+{
+   double CurrentHigh =
+      iHigh(
+         TradeSymbol,
+         InpSetupTF,
+         1
+      );
+
+   double CurrentClose =
+      iClose(
+         TradeSymbol,
+         InpSetupTF,
+         1
+      );
+
+   double Highest = -DBL_MAX;
+
+   for(
+      int i=2;
+      i<InpLiquidityLookback;
+      i++
+   )
+   {
+      double High =
+         iHigh(
+            TradeSymbol,
+            InpSetupTF,
+            i
+         );
+
+      if(High > Highest)
+         Highest = High;
+   }
+
+   if(Highest == -DBL_MAX)
+      return(false);
+
+   double Point =
+      SymbolInfoDouble(
+         TradeSymbol,
+         SYMBOL_POINT
+      );
+
+   double Tolerance =
+      InpLiquidityTolerancePoints * Point;
+
+   return(
+      CurrentHigh > Highest &&
+      CurrentClose < Highest &&
+      (CurrentHigh - CurrentClose) > Tolerance
+   );
+}
+
+//====================================================================
+// SUPPORT
+//====================================================================
+
+bool IsNearSupport()
+{
+   double CurrentPrice =
+      iClose(
+         TradeSymbol,
+         InpSetupTF,
+         1
+      );
+
+   double Lowest = DBL_MAX;
+
+   for(
+      int i=2;
+      i<InpSRLookback;
+      i++
+   )
+   {
+      double Low =
+         iLow(
+            TradeSymbol,
+            InpSetupTF,
+            i
+         );
+
+      if(Low < Lowest)
+         Lowest = Low;
+   }
+
+   if(Lowest == DBL_MAX)
+      return(false);
+
+   double Point =
+      SymbolInfoDouble(
+         TradeSymbol,
+         SYMBOL_POINT
+      );
+
+   return(
+      MathAbs(
+         CurrentPrice - Lowest
+      )
+      <=
+      InpSRTolerancePoints * Point
+   );
+}
+
+//====================================================================
+// RESISTANCE
+//====================================================================
+
+bool IsNearResistance()
+{
+   double CurrentPrice =
+      iClose(
+         TradeSymbol,
+         InpSetupTF,
+         1
+      );
+
+   double Highest = -DBL_MAX;
+
+   for(
+      int i=2;
+      i<InpSRLookback;
+      i++
+   )
+   {
+      double High =
+         iHigh(
+            TradeSymbol,
+            InpSetupTF,
+            i
+         );
+
+      if(High > Highest)
+         Highest = High;
+   }
+
+   if(Highest == -DBL_MAX)
+      return(false);
+
+   double Point =
+      SymbolInfoDouble(
+         TradeSymbol,
+         SYMBOL_POINT
+      );
+
+   return(
+      MathAbs(
+         CurrentPrice - Highest
+      )
+      <=
+      InpSRTolerancePoints * Point
+   );
+}
+
+//====================================================================
+// BULLISH CANDLE CONFIRMATION
+//====================================================================
+
+bool IsBullishCandleConfirmation()
+{
+   double Open =
+      iOpen(
+         TradeSymbol,
+         InpEntryTF,
+         1
+      );
+
+   double Close =
+      iClose(
+         TradeSymbol,
+         InpEntryTF,
+         1
+      );
+
+   double High =
+      iHigh(
+         TradeSymbol,
+         InpEntryTF,
+         1
+      );
+
+   double Low =
+      iLow(
+         TradeSymbol,
+         InpEntryTF,
+         1
+      );
+
+   double Range =
+      High - Low;
+
+   if(Range <= 0)
+      return(false);
+
+   double Body =
+      MathAbs(Close - Open);
+
+   double BodyPercent =
+      Body / Range * 100.0;
+
+   bool BullishBody =
+      Close > Open &&
+      BodyPercent >= InpMinimumBodyPercent;
+
+   bool Engulfing = false;
+
+   if(InpUseEngulfing)
+      Engulfing =
+         IsBullishEngulfing();
+
+   bool PinBar = false;
+
+   if(InpUsePinBars)
+      PinBar =
+         IsBullishPinBar();
+
+   return(
+      BullishBody ||
+      Engulfing ||
+      PinBar
+   );
+}
+
+//====================================================================
+// BEARISH CANDLE CONFIRMATION
+//====================================================================
+
+bool IsBearishCandleConfirmation()
+{
+   double Open =
+      iOpen(
+         TradeSymbol,
+         InpEntryTF,
+         1
+      );
+
+   double Close =
+      iClose(
+         TradeSymbol,
+         InpEntryTF,
+         1
+      );
+
+   double High =
+      iHigh(
+         TradeSymbol,
+         InpEntryTF,
+         1
+      );
+
+   double Low =
+      iLow(
+         TradeSymbol,
+         InpEntryTF,
+         1
+      );
+
+   double Range =
+      High - Low;
+
+   if(Range <= 0)
+      return(false);
+
+   double Body =
+      MathAbs(Close - Open);
+
+   double BodyPercent =
+      Body / Range * 100.0;
+
+   bool BearishBody =
+      Close < Open &&
+      BodyPercent >= InpMinimumBodyPercent;
+
+   bool Engulfing = false;
+
+   if(InpUseEngulfing)
+      Engulfing =
+         IsBearishEngulfing();
+
+   bool PinBar = false;
+
+   if(InpUsePinBars)
+      PinBar =
+         IsBearishPinBar();
+
+   return(
+      BearishBody ||
+      Engulfing ||
+      PinBar
+   );
+}
+
+//====================================================================
+// BULLISH ENGULFING
+//====================================================================
+
+bool IsBullishEngulfing()
+{
+   double Open1 =
+      iOpen(
+         TradeSymbol,
+         InpEntryTF,
+         1
+      );
+
+   double Close1 =
+      iClose(
+         TradeSymbol,
+         InpEntryTF,
+         1
+      );
+
+   double Open2 =
+      iOpen(
+         TradeSymbol,
+         InpEntryTF,
+         2
+      );
+
+   double Close2 =
+      iClose(
+         TradeSymbol,
+         InpEntryTF,
+         2
+      );
+
+   return(
+      Close1 > Open1 &&
+      Close2 < Open2 &&
+      Open1 <= Close2 &&
+      Close1 >= Open2
+   );
+}
+
+//====================================================================
+// BEARISH ENGULFING
+//====================================================================
+
+bool IsBearishEngulfing()
+{
+   double Open1 =
+      iOpen(
+         TradeSymbol,
+         InpEntryTF,
+         1
+      );
+
+   double Close1 =
+      iClose(
+         TradeSymbol,
+         InpEntryTF,
+         1
+      );
+
+   double Open2 =
+      iOpen(
+         TradeSymbol,
+         InpEntryTF,
+         2
+      );
+
+   double Close2 =
+      iClose(
+         TradeSymbol,
+         InpEntryTF,
+         2
+      );
+
+   return(
+      Close1 < Open1 &&
+      Close2 > Open2 &&
+      Open1 >= Close2 &&
+      Close1 <= Open2
+   );
+}
+
+//====================================================================
+// BULLISH PIN BAR
+//====================================================================
+
+bool IsBullishPinBar()
+{
+   double Open =
+      iOpen(
+         TradeSymbol,
+         InpEntryTF,
+         1
+      );
+
+   double Close =
+      iClose(
+         TradeSymbol,
+         InpEntryTF,
+         1
+      );
+
+   double High =
+      iHigh(
+         TradeSymbol,
+         InpEntryTF,
+         1
+      );
+
+   double Low =
+      iLow(
+         TradeSymbol,
+         InpEntryTF,
+         1
+      );
+
+   double Body =
+      MathAbs(Close - Open);
+
+   double LowerWick =
+      MathMin(Open,Close) - Low;
+
+   double UpperWick =
+      High - MathMax(Open,Close);
+
+   if(Body <= 0)
+      Body = SymbolInfoDouble(
+         TradeSymbol,
+         SYMBOL_POINT
+      );
+
+   return(
+      LowerWick >= Body * 2.0 &&
+      LowerWick > UpperWick
+   );
+}
+
+//====================================================================
+// BEARISH PIN BAR
+//====================================================================
+
+bool IsBearishPinBar()
+{
+   double Open =
+      iOpen(
+         TradeSymbol,
+         InpEntryTF,
+         1
+      );
+
+   double Close =
+      iClose(
+         TradeSymbol,
+         InpEntryTF,
+         1
+      );
+
+   double High =
+      iHigh(
+         TradeSymbol,
+         InpEntryTF,
+         1
+      );
+
+   double Low =
+      iLow(
+         TradeSymbol,
+         InpEntryTF,
+         1
+      );
+
+   double Body =
+      MathAbs(Close - Open);
+
+   double LowerWick =
+      MathMin(Open,Close) - Low;
+
+   double UpperWick =
+      High - MathMax(Open,Close);
+
+   if(Body <= 0)
+      Body = SymbolInfoDouble(
+         TradeSymbol,
+         SYMBOL_POINT
+      );
+
+   return(
+      UpperWick >= Body * 2.0 &&
+      UpperWick > LowerWick
+   );
+}
+
+//====================================================================
+// OPEN BUY
+//====================================================================
+
+void OpenBuy(int Score)
+{
+   double Ask =
+      SymbolInfoDouble(
+         TradeSymbol,
+         SYMBOL_ASK
+      );
+
+   if(Ask <= 0)
+      return;
+
+   double StopDistance = GetStopDistance();
+
+   double TargetDistance =
+      GetTargetDistance(
+         StopDistance
+      );
+
+   double SL =
+      Ask - StopDistance;
+
+   double TP =
+      Ask + TargetDistance;
+
+   SL = NormalizePrice(SL);
+
+   TP = NormalizePrice(TP);
+
+   double Lot =
+      CalculateLotSize(
+         StopDistance
+      );
+
+   if(Lot <= 0)
+      return;
+
+   if(!ValidateStops(
+      ORDER_TYPE_BUY,
+      SL,
+      TP
+   ))
+      return;
+
+   bool Result =
+      trade.Buy(
+         Lot,
+         TradeSymbol,
+         Ask,
+         SL,
+         TP,
+         "EmpireBot V20 BUY"
+      );
+
+   if(Result)
+   {
+      TradesToday++;
+
+      LastTradeTime =
+         TimeCurrent();
+
+      Print(
+         "V20 BUY | Score=",
+         Score,
+         " | Lot=",
+         DoubleToString(Lot,2),
+         " | SL=",
+         DoubleToString(SL,DigitsForSymbol()),
+         " | TP=",
+         DoubleToString(TP,DigitsForSymbol())
+      );
+   }
+   else
+   {
+      Print(
+         "V20 BUY ERROR: ",
+         trade.ResultRetcodeDescription()
+      );
+   }
+}
+
+//====================================================================
+// OPEN SELL
+//====================================================================
+
+void OpenSell(int Score)
+{
+   double Bid =
+      SymbolInfoDouble(
+         TradeSymbol,
+         SYMBOL_BID
+      );
+
+   if(Bid <= 0)
+      return;
+
+   double StopDistance =
+      GetStopDistance();
+
+   double TargetDistance =
+      GetTargetDistance(
+         StopDistance
+      );
+
+   double SL =
+      Bid + StopDistance;
+
+   double TP =
+      Bid - TargetDistance;
+
+   SL = NormalizePrice(SL);
+
+   TP = NormalizePrice(TP);
+
+   double Lot =
+      CalculateLotSize(
+         StopDistance
+      );
+
+   if(Lot <= 0)
+      return;
+
+   if(!ValidateStops(
+      ORDER_TYPE_SELL,
+      SL,
+      TP
+   ))
+      return;
+
+   bool Result =
+      trade.Sell(
+         Lot,
+         TradeSymbol,
+         Bid,
+         SL,
+         TP,
+         "EmpireBot V20 SELL"
+      );
+
+   if(Result)
+   {
+      TradesToday++;
+
+      LastTradeTime =
+         TimeCurrent();
+
+      Print(
+         "V20 SELL | Score=",
+         Score,
+         " | Lot=",
+         DoubleToString(Lot,2),
+         " | SL=",
+         DoubleToString(SL,DigitsForSymbol()),
+         " | TP=",
+         DoubleToString(TP,DigitsForSymbol())
+      );
+   }
+   else
+   {
+      Print(
+         "V20 SELL ERROR: ",
+         trade.ResultRetcodeDescription()
+      );
+   }
+}
+
+//====================================================================
+// STOP DISTANCE
+//====================================================================
+
+double GetStopDistance()
+{
+   double ATR =
+      GetATR();
+
+   if(
+      InpUseATRStops &&
+      ATR > 0
+   )
+   {
+      return(
+         ATR *
+         InpATRStopMultiplier
+      );
+   }
+
+   double Point =
+      SymbolInfoDouble(
+         TradeSymbol,
+         SYMBOL_POINT
+      );
+
+   return(
+      InpMinimumATRPoints *
+      Point
+   );
+}
+
+//====================================================================
+// TARGET DISTANCE
+//====================================================================
+
+double GetTargetDistance(
+   double StopDistance
+)
+{
+   double ATR =
+      GetATR();
+
+   if(
+      InpUseATRStops &&
+      ATR > 0
+   )
+   {
+      double ATRTarget =
+         ATR *
+         InpATRTargetMultiplier;
+
+      double RRTarget =
+         StopDistance *
+         InpMinimumRiskReward;
+
+      return(
+         MathMax(
+            ATRTarget,
+            RRTarget
+         )
+      );
+   }
+
+   return(
+      StopDistance *
+      InpMinimumRiskReward
+   );
+}
+
+//====================================================================
+// LOT SIZE
+//====================================================================
+
+double CalculateLotSize(
+   double StopDistance
+)
+{
+   double BalanceOrEquity;
+
+   if(InpUseEquityForRisk)
+   {
+      BalanceOrEquity =
+         AccountInfoDouble(
+            ACCOUNT_EQUITY
+         );
+   }
+   else
+   {
+      BalanceOrEquity =
+         AccountInfoDouble(
+            ACCOUNT_BALANCE
+         );
+   }
+
+   double RiskMoney =
+      BalanceOrEquity *
+      InpRiskPercent /
+      100.0;
+
+   double TickSize =
+      SymbolInfoDouble(
+         TradeSymbol,
+         SYMBOL_TRADE_TICK_SIZE
+      );
+
+   double TickValue =
+      SymbolInfoDouble(
+         TradeSymbol,
+         SYMBOL_TRADE_TICK_VALUE
+      );
+
+   double VolumeMin =
+      SymbolInfoDouble(
+         TradeSymbol,
+         SYMBOL_VOLUME_MIN
+      );
+
+   double VolumeMax =
+      SymbolInfoDouble(
+         TradeSymbol,
+         SYMBOL_VOLUME_MAX
+      );
+
+   double VolumeStep =
+      SymbolInfoDouble(
+         TradeSymbol,
+         SYMBOL_VOLUME_STEP
+      );
+
+   if(
+      TickSize <= 0 ||
+      TickValue <= 0 ||
+      StopDistance <= 0
+   )
+      return(VolumeMin);
+
+   double LossPerLot =
+      (
+         StopDistance /
+         TickSize
+      ) *
+      TickValue;
+
+   if(LossPerLot <= 0)
+      return(VolumeMin);
+
+   double Lots =
+      RiskMoney /
+      LossPerLot;
+
+   Lots =
+      MathMin(
+         Lots,
+         VolumeMax
+      );
+
+   Lots =
+      MathMin(
+         Lots,
+         InpMaximumLot
+      );
+
+   Lots =
+      MathFloor(
+         Lots /
+         VolumeStep
+      ) *
+      VolumeStep;
+
+   if(Lots < VolumeMin)
+      Lots = VolumeMin;
+
+   return(
+      NormalizeVolume(Lots)
+   );
+}
+
+//====================================================================
+// VOLUME NORMALIZATION
+//====================================================================
+
+double NormalizeVolume(
+   double Volume
+)
+{
+   double Step =
+      SymbolInfoDouble(
+         TradeSymbol,
+         SYMBOL_VOLUME_STEP
+      );
+
+   if(Step <= 0)
+      return(Volume);
+
+   int Digits = 0;
+
+   if(Step < 1.0)
+      Digits = 2;
+
+   if(Step < 0.1)
+      Digits = 3;
+
+   if(Step < 0.01)
+      Digits = 4;
+
+   return(
+      NormalizeDouble(
+         Volume,
+         Digits
+      )
+   );
+}
+
+//====================================================================
+// PRICE NORMALIZATION
+//====================================================================
+
+double NormalizePrice(
+   double Price
+)
+{
+   return(
+      NormalizeDouble(
+         Price,
+         DigitsForSymbol()
+      )
+   );
+}
+
+//====================================================================
+// SYMBOL DIGITS
+//====================================================================
+
+int DigitsForSymbol()
+{
+   return(
+      (int)SymbolInfoInteger(
+         TradeSymbol,
+         SYMBOL_DIGITS
+      )
+   );
+}
+
+//====================================================================
+// VALIDATE STOPS
+//====================================================================
+
+bool ValidateStops(
+   ENUM_ORDER_TYPE OrderType,
+   double SL,
+   double TP
+)
+{
+   double Point =
+      SymbolInfoDouble(
+         TradeSymbol,
+         SYMBOL_POINT
+      );
+
+   int StopsLevel =
+      (int)SymbolInfoInteger(
+         TradeSymbol,
+         SYMBOL_TRADE_STOPS_LEVEL
+      );
+
+   double MinimumDistance =
+      StopsLevel * Point;
+
+   double Bid =
+      SymbolInfoDouble(
+         TradeSymbol,
+         SYMBOL_BID
+      );
+
+   double Ask =
+      SymbolInfoDouble(
+         TradeSymbol,
+         SYMBOL_ASK
+      );
+
+   if(OrderType == ORDER_TYPE_BUY)
+   {
+      if(
+         Ask - SL <
+         MinimumDistance
+      )
+         return(false);
+
+      if(
+         TP - Ask <
+         MinimumDistance
+      )
+         return(false);
+   }
+
+   if(OrderType == ORDER_TYPE_SELL)
+   {
+      if(
+         SL - Bid <
+         MinimumDistance
+      )
+         return(false);
+
+      if(
+         Bid - TP <
+         MinimumDistance
+      )
+         return(false);
+   }
+
+   return(true);
+}
+
+//====================================================================
+// POSITION COUNT
+//====================================================================
+
+int CountOurPositions()
+{
+   int Count = 0;
+
+   for(
+      int i=PositionsTotal()-1;
+      i>=0;
+      i--
+   )
+   {
+      ulong Ticket =
+         PositionGetTicket(i);
+
+      if(Ticket == 0)
+         continue;
+
+      if(!PositionSelectByTicket(Ticket))
+         continue;
+
+      if(
+         PositionGetString(
+            POSITION_SYMBOL
+         ) != TradeSymbol
+      )
+         continue;
+
+      if(
+         PositionGetInteger(
+            POSITION_MAGIC
+         ) != InpMagicNumber
+      )
+         continue;
+
+      Count++;
+   }
+
+   return(Count);
+}
+
+//====================================================================
+// POSITION MANAGEMENT
+//====================================================================
+
+void ManageOpenPositions()
+{
+   double Bid =
+      SymbolInfoDouble(
+         TradeSymbol,
+         SYMBOL_BID
+      );
+
+   double Ask =
+      SymbolInfoDouble(
+         TradeSymbol,
+         SYMBOL_ASK
+      );
+
+   double Point =
+      SymbolInfoDouble(
+         TradeSymbol,
+         SYMBOL_POINT
+      );
+
+   double ATR =
+      GetATR();
+
+   for(
+      int i=PositionsTotal()-1;
+      i>=0;
+      i--
+   )
+   {
+      ulong Ticket =
+         PositionGetTicket(i);
+
+      if(Ticket == 0)
+         continue;
+
+      if(!PositionSelectByTicket(Ticket))
+         continue;
+
+      if(
+         PositionGetString(
+            POSITION_SYMBOL
+         ) != TradeSymbol
+      )
+         continue;
+
+      if(
+         PositionGetInteger(
+            POSITION_MAGIC
+         ) != InpMagicNumber
+      )
+         continue;
+
+      long Type =
+         PositionGetInteger(
+            POSITION_TYPE
+         );
+
+      double OpenPrice =
+         PositionGetDouble(
+            POSITION_PRICE_OPEN
+         );
+
+      double SL =
+         PositionGetDouble(
+            POSITION_SL
+         );
+
+      double TP =
+         PositionGetDouble(
+            POSITION_TP
+         );
+
+      double Volume =
+         PositionGetDouble(
+            POSITION_VOLUME
+         );
+
+      if(SL <= 0)
+         continue;
+
+      //=============================================================
+      // BUY
+      //=============================================================
+
+      if(Type == POSITION_TYPE_BUY)
+      {
+         double ProfitDistance =
+            Bid - OpenPrice;
+
+         double InitialRisk =
+            MathAbs(
+               OpenPrice - SL
+            );
+
+         if(InitialRisk <= 0)
+            continue;
+
+         double R =
+            ProfitDistance /
+            InitialRisk;
+
+         // Break-even
+
+         if(
+            InpUseBreakEven &&
+            R >= InpBreakEvenAtR
+         )
+         {
+            double NewSL =
+               OpenPrice +
+               InpBreakEvenLockPoints *
+               Point;
+
+            NewSL =
+               NormalizePrice(NewSL);
+
+            if(
+               NewSL > SL &&
+               NewSL < Bid
+            )
+            {
+               trade.PositionModify(
+                  Ticket,
+                  NewSL,
+                  TP
+               );
+            }
+         }
+
+         // Partial close
+
+         if(
+            InpUsePartialClose &&
+            R >= InpPartialCloseAtR
+         )
+         {
+            PartialClosePosition(
+               Ticket,
+               Volume
+            );
+         }
+
+         // Trailing
+
+         if(
+            InpUseTrailingStop &&
+            R >= InpTrailingStartR &&
+            ATR > 0
+         )
+         {
+            double NewSL =
+               Bid -
+               ATR *
+               InpTrailingATRMultiplier;
+
+            NewSL =
+               NormalizePrice(NewSL);
+
+            if(
+               NewSL > SL &&
+               NewSL < Bid
+            )
+            {
+               trade.PositionModify(
+                  Ticket,
+                  NewSL,
+                  TP
+               );
+            }
+         }
+      }
+
+      //=============================================================
+      // SELL
+      //=============================================================
+
+      if(Type == POSITION_TYPE_SELL)
+      {
+         double ProfitDistance =
+            OpenPrice - Ask;
+
+         double InitialRisk =
+            MathAbs(
+               SL - OpenPrice
+            );
+
+         if(InitialRisk <= 0)
+            continue;
+
+         double R =
+            ProfitDistance /
+            InitialRisk;
+
+         // Break-even
+
+         if(
+            InpUseBreakEven &&
+            R >= InpBreakEvenAtR
+         )
+         {
+            double NewSL =
+               OpenPrice -
+               InpBreakEvenLockPoints *
+               Point;
+
+            NewSL =
+               NormalizePrice(NewSL);
+
+            if(
+               NewSL < SL &&
+               NewSL > Ask
+            )
+            {
+               trade.PositionModify(
+                  Ticket,
+                  NewSL,
+                  TP
+               );
+            }
+         }
+
+         // Partial close
+
+         if(
+            InpUsePartialClose &&
+            R >= InpPartialCloseAtR
+         )
+         {
+            PartialClosePosition(
+               Ticket,
+               Volume
+            );
+         }
+
+         // Trailing
+
+         if(
+            InpUseTrailingStop &&
+            R >= InpTrailingStartR &&
+            ATR > 0
+         )
+         {
+            double NewSL =
+               Ask +
+               ATR *
+               InpTrailingATRMultiplier;
+
+            NewSL =
+               NormalizePrice(NewSL);
+
+            if(
+               NewSL < SL &&
+               NewSL > Ask
+            )
+            {
+               trade.PositionModify(
+                  Ticket,
+                  NewSL,
+                  TP
+               );
+            }
+         }
+      }
+   }
+}
+
+//====================================================================
+// PARTIAL CLOSE
+//====================================================================
+
+void PartialClosePosition(
+   ulong Ticket,
+   double CurrentVolume
+)
+{
+   static ulong LastPartialTicket = 0;
+
+   if(LastPartialTicket == Ticket)
+      return;
+
+   double MinimumVolume =
+      SymbolInfoDouble(
+         TradeSymbol,
+         SYMBOL_VOLUME_MIN
+      );
+
+   double CloseVolume =
+      CurrentVolume *
+      InpPartialClosePercent /
+      100.0;
+
+   CloseVolume =
+      NormalizeVolume(
+         CloseVolume
+      );
+
+   if(CloseVolume < MinimumVolume)
+      return;
+
+   if(CloseVolume >= CurrentVolume)
+      return;
+
+   if(
+      trade.PositionClosePartial(
+         Ticket,
+         CloseVolume
+      )
+   )
+   {
+      LastPartialTicket = Ticket;
+
+      Print(
+         "Partial close executed. Ticket=",
+         Ticket,
+         " Volume=",
+         DoubleToString(
+            CloseVolume,
+            2
+         )
+      );
+   }
+}
+
+//====================================================================
+// SPREAD
+//====================================================================
+
+bool IsSpreadAcceptable()
+{
+   double Bid =
+      SymbolInfoDouble(
+         TradeSymbol,
+         SYMBOL_BID
+      );
+
+   double Ask =
+      SymbolInfoDouble(
+         TradeSymbol,
+         SYMBOL_ASK
+      );
+
+   double Point =
+      SymbolInfoDouble(
+         TradeSymbol,
+         SYMBOL_POINT
+      );
+
+   if(Point <= 0)
+      return(false);
+
+   double Spread =
+      (Ask - Bid) /
+      Point;
+
+   return(
+      Spread <=
+      InpMaximumSpreadPoints
+   );
+}
+
+//====================================================================
+// SESSION
+//====================================================================
+
+bool IsTradingSession()
+{
+   if(!InpUseSessionFilter)
+      return(true);
+
+   MqlDateTime T;
+
+   TimeToStruct(
+      TimeCurrent(),
+      T
+   );
+
+   int Hour =
+      T.hour;
+
+   bool Asian =
+      IsHourInRange(
+         Hour,
+         InpAsianStartHour,
+         InpAsianEndHour
+      );
+
+   bool London =
+      IsHourInRange(
+         Hour,
+         InpLondonStartHour,
+         InpLondonEndHour
+      );
+
+   bool NewYork =
+      IsHourInRange(
+         Hour,
+         InpNewYorkStartHour,
+         InpNewYorkEndHour
+      );
+
+   if(
+      Asian &&
+      InpTradeAsianSession
+   )
+      return(true);
+
+   if(
+      London &&
+      InpTradeLondonSession
+   )
+      return(true);
+
+   if(
+      NewYork &&
+      InpTradeNewYorkSession
+   )
+      return(true);
+
+   return(false);
+}
+
+//====================================================================
+// HOUR RANGE
+//====================================================================
+
+bool IsHourInRange(
+   int Hour,
+   int StartHour,
+   int EndHour
+)
+{
+   if(StartHour < EndHour)
+   {
+      return(
+         Hour >= StartHour &&
+         Hour < EndHour
+      );
+   }
+
+   return(
+      Hour >= StartHour ||
+      Hour < EndHour
+   );
+}
+
+//====================================================================
+// FRIDAY
+//====================================================================
+
+bool IsFridayAllowed()
+{
+   if(!InpAvoidFridayLate)
+      return(true);
+
+   MqlDateTime T;
+
+   TimeToStruct(
+      TimeCurrent(),
+      T
+   );
+
+   // Friday = 5
+
+   if(T.day_of_week != 5)
+      return(true);
+
+   if(T.hour >= InpFridayStopHour)
+      return(false);
+
+   return(true);
+}
+
+//====================================================================
+// COOLDOWN
+//====================================================================
+
+bool CooldownFinished()
+{
+   if(LastTradeTime == 0)
+      return(true);
+
+   int SecondsPassed =
+      (int)(
+         TimeCurrent() -
+         LastTradeTime
+      );
+
+   return(
+      SecondsPassed >=
+      InpCooldownMinutes * 60
+   );
+}
+
+//====================================================================
+// DAILY LOSS
+//====================================================================
+
+bool IsDailyLossLimitReached()
+{
+   if(
+      InpMaximumDailyLossPercent <= 0
+   )
+      return(false);
+
+   if(DayStartingBalance <= 0)
+      return(false);
+
+   double Equity =
+      AccountInfoDouble(
+         ACCOUNT_EQUITY
+      );
+
+   double LossPercent =
+      (
+         DayStartingBalance -
+         Equity
+      )
+      /
+      DayStartingBalance
+      *
+      100.0;
+
+   return(
+      LossPercent >=
+      InpMaximumDailyLossPercent
+   );
+}
+
+//====================================================================
+// WEEKLY LOSS
+//====================================================================
+
+bool IsWeeklyLossLimitReached()
+{
+   if(
+      InpMaximumWeeklyLossPercent <= 0
+   )
+      return(false);
+
+   if(WeekStartingBalance <= 0)
+      return(false);
+
+   double Equity =
+      AccountInfoDouble(
+         ACCOUNT_EQUITY
+      );
+
+   double LossPercent =
+      (
+         WeekStartingBalance -
+         Equity
+      )
+      /
+      WeekStartingBalance
+      *
+      100.0;
+
+   return(
+      LossPercent >=
+      InpMaximumWeeklyLossPercent
+   );
+}
+
+//====================================================================
+// MAXIMUM DRAWDOWN
+//====================================================================
+
+bool IsMaximumDrawdownReached()
+{
+   if(
+      InpMaximumDrawdownPercent <= 0
+   )
+      return(false);
+
+   double Equity =
+      AccountInfoDouble(
+         ACCOUNT_EQUITY
+      );
+
+   if(
+      Equity >
+      HighestEquity
+   )
+   {
+      HighestEquity =
+         Equity;
+   }
+
+   if(HighestEquity <= 0)
+      return(false);
+
+   double Drawdown =
+      (
+         HighestEquity -
+         Equity
+      )
+      /
+      HighestEquity
+      *
+      100.0;
+
+   return(
+      Drawdown >=
+      InpMaximumDrawdownPercent
+   );
+}
+
+//====================================================================
+// ACCOUNT PROTECTION UPDATE
+//====================================================================
+
+void UpdateAccountProtection()
+{
+   datetime Today =
+      GetDayStart();
+
+   datetime Week =
+      GetWeekStart();
+
+   if(Today != CurrentDay)
+   {
+      CurrentDay = Today;
+
+      DayStartingBalance =
+         AccountInfoDouble(
+            ACCOUNT_BALANCE
+         );
+
+      TradesToday = 0;
+
+      ConsecutiveLosses = 0;
+
+      TradingLocked = false;
+   }
+
+   if(Week != CurrentWeek)
+   {
+      CurrentWeek = Week;
+
+      WeekStartingBalance =
+         AccountInfoDouble(
+            ACCOUNT_BALANCE
+         );
+   }
+
+   double Equity =
+      AccountInfoDouble(
+         ACCOUNT_EQUITY
+      );
+
+   if(
+      Equity >
+      HighestEquity
+   )
+   {
+      HighestEquity =
+         Equity;
+   }
+}
+
+//====================================================================
+// DAY START
+//====================================================================
+
+datetime GetDayStart()
+{
+   MqlDateTime T;
+
+   TimeToStruct(
+      TimeCurrent(),
+      T
+   );
+
+   T.hour = 0;
+
+   T.min = 0;
+
+   T.sec = 0;
+
+   return(
+      StructToTime(T)
+   );
+}
+
+//====================================================================
+// WEEK START
+//====================================================================
+
+datetime GetWeekStart()
+{
+   MqlDateTime T;
+
+   TimeToStruct(
+      TimeCurrent(),
+      T
+   );
+
+   int DaysFromMonday =
+      T.day_of_week - 1;
+
+   if(DaysFromMonday < 0)
+      DaysFromMonday = 6;
+
+   datetime Today =
+      StructToTime(T);
+
+   datetime Monday =
+      Today -
+      DaysFromMonday * 86400;
+
+   MqlDateTime M;
+
+   TimeToStruct(
+      Monday,
+      M
+   );
+
+   M.hour = 0;
+
+   M.min = 0;
+
+   M.sec = 0;
+
+   return(
+      StructToTime(M)
+   );
+}
+
+//====================================================================
+// NEWS FILTER
+//====================================================================
+
+bool IsNewsBlocked()
+{
+   // The EA deliberately keeps the news filter disabled by default.
+   //
+   // This function is reserved for MT5 economic-calendar integration.
+   // A broker/terminal may not provide calendar data in every testing
+   // environment.
+   //
+   // Returning false prevents the bot from pretending that it has
+   // news data when it does not.
+
+   return(false);
+}
+
+//====================================================================
+// DASHBOARD
+//====================================================================
+
+void DrawDashboard()
+{
+   double Balance =
+      AccountInfoDouble(
+         ACCOUNT_BALANCE
+      );
+
+   double Equity =
+      AccountInfoDouble(
+         ACCOUNT_EQUITY
+      );
+
+   double Floating =
+      Equity - Balance;
+
+   double RSI =
+      GetRSI();
+
+   double ATR =
+      GetATR();
+
+   int Trend =
+      GetTrendDirection();
+
+   int Structure =
+      GetMarketStructure();
+
+   string TrendText =
+      "NEUTRAL";
+
+   if(Trend == 1)
+      TrendText = "BULLISH";
+
+   if(Trend == -1)
+      TrendText = "BEARISH";
+
+   string StructureText =
+      "RANGING";
+
+   if(Structure == 1)
+      StructureText =
+         "HIGHER HIGH / HIGHER LOW";
+
+   if(Structure == -1)
+      StructureText =
+         "LOWER HIGH / LOWER LOW";
+
+   string SessionText =
+      IsTradingSession()
+      ? "OPEN"
+      : "CLOSED";
+
+   string SpreadText =
+      IsSpreadAcceptable()
+      ? "OK"
+      : "HIGH";
+
+   string LockText =
+      TradingLocked
+      ? "LOCKED"
+      : "ACTIVE";
+
+   Comment(
+      "\n",
+      "================================================\n",
+      "           EMPIRE TRADE MARKETS\n",
+      "                 V20\n",
+      "================================================\n",
+      "Symbol:       ",TradeSymbol,"\n",
+      "Trend TF:     ",EnumToString(InpTrendTF),"\n",
+      "Structure TF: ",EnumToString(InpStructureTF),"\n",
+      "Setup TF:     ",EnumToString(InpSetupTF),"\n",
+      "Entry TF:     ",EnumToString(InpEntryTF),"\n",
+      "------------------------------------------------\n",
+      "HTF Trend:    ",TrendText,"\n",
+      "Structure:    ",StructureText,"\n",
+      "RSI:          ",DoubleToString(RSI,2),"\n",
+      "ATR:          ",DoubleToString(ATR,DigitsForSymbol()),"\n",
+      "Session:      ",SessionText,"\n",
+      "Spread:       ",SpreadText,"\n",
+      "------------------------------------------------\n",
+      "Balance:      ",DoubleToString(Balance,2),"\n",
+      "Equity:       ",DoubleToString(Equity,2),"\n",
+      "Floating P/L: ",DoubleToString(Floating,2),"\n",
+      "Open Trades:  ",CountOurPositions(),"\n",
+      "Trades Today: ",TradesToday,"\n",
+      "Loss Streak:  ",ConsecutiveLosses,"\n",
+      "Status:       ",LockText,"\n",
+      "------------------------------------------------\n",
+      "Risk/Trade:   ",DoubleToString(InpRiskPercent,2),"%\n",
+      "Daily Limit:  ",DoubleToString(InpMaximumDailyLossPercent,2),"%\n",
+      "Weekly Limit: ",DoubleToString(InpMaximumWeeklyLossPercent,2),"%\n",
+      "Max DD:       ",DoubleToString(InpMaximumDrawdownPercent,2),"%\n",
+      "================================================"
+   );
+}
+
+//+------------------------------------------------------------------+
+//|                       END OF EMPIRE BOT V20                     |
+//+------------------------------------------------------------------+
